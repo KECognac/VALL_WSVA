@@ -9,16 +9,19 @@
 #' @return A dataset containing tidied Aquarius data
 getAquarius <- function(park, path = "data/park/", system = "Mac"){
   
-  #park = "SHEN"
-  #system = "Mac"
+  park = "VALL"
+  system = "Mac"
+  path = "data/park/"
   
-full_data <- vector("list", length = length(park))
+  full_data <- vector("list", length = length(park))
   
   for(i in 1:length(park)){
     
+    dir.create(file.path(getwd(), paste0("/", path, "/", park[i])), showWarnings = FALSE)
+    
     dir.create(file.path(getwd(), paste0("/", path, "/", park[i], "/aquarius/")), showWarnings = FALSE)
     
-    # Create the resting place for each park's Aquarius data:
+    # Create the resting place for each park[i]'s Aquarius data:
     dir.create(file.path(getwd(), paste0("/", path, "/", park[i], "/aquarius/temp/")), showWarnings = FALSE)
     
     # create a temporary directory for all raw datafiles to be sent to
@@ -38,8 +41,8 @@ full_data <- vector("list", length = length(park))
                                                 browser.helperApps.neverAsk.saveToDisk = "text/csv"))
     
     exCap <- list(firefox_profile = fprof$firefox_profile)
-                  # REMOVE  "Pop-up" CONSOLE:
-                  #"moz:firefoxOptions" = list(args = list('--headless')))
+    # REMOVE  "Pop-up" CONSOLE:
+    #"moz:firefoxOptions" = list(args = list('--headless')))
     
     # start up RSelenium session:
     rD <- RSelenium::rsDriver(browser = "firefox", port = sample.int(1000, 1), extraCapabilities = exCap)
@@ -54,27 +57,27 @@ full_data <- vector("list", length = length(park))
     Sys.sleep(3) # provide time for navigation and selection
     dropper$clickElement()
     Sys.sleep(3)
-    dropper <- remDr$findElement(using = 'xpath', value = '/html/body/section/section/section/div[3]/div[2]/div[1]/div[2]/div[2]/div[6]/div/ul/li[2]/a')
+    dropper <- remDr$findElement(using = 'xpath', value = '/html/body/section/section/section/div[3]/div[2]/div[1]/div[2]/div[2]/div[6]/div/ul/li[2]/button')
     Sys.sleep(3) # provide time for navigation and selection
     dropper$clickElement()
     Sys.sleep(3) # provide  time for download to start
     
     sites <- read.csv(list.files(path = downloadPath, pattern = "*.csv", full.names = TRUE)[1], skip = 1)
     
-    # select list of sites associated with our park(s) of interest
+    # select list of sites associated with our park[i](s) of interest
     sites <- sites %>% dplyr::filter(grepl(paste0(park[i]), Identifier)) %>%
       mutate(sites=paste0('https://irma.nps.gov/aqwebportal/Data/Location/Summary/Location/', Identifier))
     locations <- sites$sites
     
     print(paste0(n_distinct(locations), ' Aquarius sites associated with ', park[i]))
     
-    # Create empty tibble for storing for loop data into if not sites exist for a park. 
+    # Create empty tibble for storing for loop data into if not sites exist for a park[i]. 
     if(nrow(sites) == 0){
       
       full_data <- tibble(c("timestamp","siteID","parameter","val","units","UNIT_CODE","Long","Lat","EPSG","Location.Type"),
-                               c( NA, NA, NA, NA, NA, NA, NA, NA, NA, NA))
+                          c( NA, NA, NA, NA, NA, NA, NA, NA, NA, NA))
       
-      print(paste0(park, " does not have any Aquarius data."))
+      print(paste0(park[i], " does not have any Aquarius data."))
     }
     
     if(nrow(sites) != 0) {
@@ -91,17 +94,21 @@ full_data <- vector("list", length = length(park))
         
         remDr$screenshot(display = TRUE) # shows webpage for each site
         
-        try(dropper <- remDr$findElement(using = 'xpath', value = '/html/body/section/section/section/div[3]/div[4]/div[1]/div[6]/div/div[1]/div[1]/div[1]/div/div[2]/div/div[18]/div/a[3]'),
+        try(dropper <- remDr$findElement(using = 'xpath', value = '/html/body/section/section/section/div[3]/div[4]/div[1]/div[6]/div/div[1]/div[1]/div/div/div[2]/div/div[31]/div/a[3]'),
             silent=T)  
         Sys.sleep(4)
         try(dropper$clickElement())
-        Sys.sleep(4)
-        try(dropper <- remDr$findElement(using = 'xpath', value = 'html/body/section/section/section/div[3]/div[4]/div[1]/div[6]/div/div[1]/div[1]/div/div/div[2]/div/div[18]/div/a[4]'),
-            silent=T)
-        Sys.sleep(4)
-        try(dropper$clickElement())
-        Sys.sleep(4) # provide ample time for download to configure. totally dependent on web connection
-                     # I need to find code that waits until you know the data has finished downloading. 
+        Sys.sleep(10)
+        # try(dropper <- remDr$findElement(using = 'xpath', value = '/html/body/section/section/section/div[3]/div[4]/div[1]/div[6]/div/div[1]/div[1]/div/div/div[2]/div/div[31]/div/a[3]'),
+        #     silent=T)
+        # Sys.sleep(4)
+        # try(dropper$clickElement())
+        # Wait for download to complete by checking if the zip file has finished downloading
+        while(length(list.files(path = downloadPath, pattern = "*.crdownload")) > 0) {
+          Sys.sleep(10)  # Check every 10 seconds for any in-progress downloads
+        }
+        #Sys.sleep(60) # provide ample time for download to configure. totally dependent on web connection
+        # I need to find code that waits until you know the data has finished downloading. 
         
         # Site coordinates... not listed in data table, so pull from site's meta-data table on webpage
         try(coords <- remDr$findElement(using = 'xpath', value = '/html/body/section/section/section/div[3]/div[4]/div[1]/div[6]/div/div[1]/div[1]/div/div/div[2]/div/div[4]/div[2]'))
@@ -134,20 +141,26 @@ full_data <- vector("list", length = length(park))
         
         remDr$screenshot(display = TRUE) # shows webpage for each site
         
-        try(dropper <- remDr$findElement(using = 'xpath', value = '/html/body/section/section/section/div[3]/div[4]/div[1]/div[6]/div/div[1]/div[1]/div[1]/div/div[2]/div/div[18]/div/a[3]'),
-            silent = T)  
-        Sys.sleep(3)
+        try(dropper <- remDr$findElement(using = 'xpath', value = '/html/body/section/section/section/div[3]/div[4]/div[1]/div[6]/div/div[1]/div[1]/div/div/div[2]/div/div[31]/div/a[3]'),
+            silent=T)  
+        Sys.sleep(4)
         try(dropper$clickElement())
-        Sys.sleep(60)
-        try(dropper <- remDr$findElement(using = 'xpath', value = 'html/body/section/section/section/div[3]/div[4]/div[1]/div[6]/div/div[1]/div[1]/div/div/div[2]/div/div[18]/div/a[4]'),
-            silent=T)
-        Sys.sleep(p3)
-        try(dropper$clickElement())
-        Sys.sleep(60) # provide ample time for download to configure
+        # Sys.sleep(4)
+        # try(dropper <- remDr$findElement(using = 'xpath', value = 'html/body/section/section/section/div[3]/div[4]/div[1]/div[6]/div/div[1]/div[1]/div/div/div[2]/div/div[18]/div/a[4]'),
+        #     silent=T)
+        Sys.sleep(20)
+        # try(dropper$clickElement())
+        #Sys.sleep(90) # provide ample time for download to configure. totally dependent on web connection
+        # I need to find code that waits until you know the data has finished downloading. 
+        
+        # Wait for download to complete by checking if the zip file has finished downloading
+        while(length(list.files(path = downloadPath, pattern = "*.crdownload")) > 0) {
+          Sys.sleep(10)  # Check every 10 seconds for any in-progress downloads
+        }
         
         # Site coordinates
         try(coords <- remDr$findElement(using = 'xpath', value = '/html/body/section/section/section/div[3]/div[4]/div[1]/div[6]/div/div[1]/div[1]/div/div/div[2]/div/div[4]/div[2]'))
-        Sys.sleep(3)
+        Sys.sleep(10)
         try(
           coord <- coords$getElementText()[[1]] %>%
             as_tibble() %>%
@@ -191,7 +204,7 @@ full_data <- vector("list", length = length(park))
                                                     pattern = "(?<=\\().*(?=\\))")), silent = TRUE)
       
       # delete the temporary folder
-      unlink(file.path(downloadPath), recursive = T)
+      # unlink(file.path(downloadPath), recursive = T)
       
       
       # Tidy Aquarius data into one data frame
@@ -228,11 +241,13 @@ full_data <- vector("list", length = length(park))
         dplyr::mutate(UNIT_CODE=substr(siteID, 1, 4)) %>%
         dplyr::select(c(timestamp, siteID, parameter, val, units, UNIT_CODE)) %>%
         dplyr::left_join(.,coords, by = c("siteID" = "site")) %>%
+        dplyr::rename(lon = Lat,
+                      lat = Long) %>%
         dplyr::left_join(.,dplyr::select(sites, c(Identifier, Location.Type)), by = c("siteID" = "Identifier"))
       
-      write_csv(full_data[[i]], paste0(path, "/", park[i], "/", park[i], "_aquarius_data.csv"))
+      write_csv(full_data[[i]], paste0(path, "/", park[i], "/aquarius/", park[i], "_aquarius_data.csv"))
       
-      unlink(file.path(getwd(), paste0(path, "/", park[i], "/aquarius/")), recursive = T)
+      #unlink(file.path(getwd(), paste0(path, "/", park[i], "/aquarius/")), recursive = T)
       
       print(paste0(park[i], "'s Aquarius data downloaded."))
     }
