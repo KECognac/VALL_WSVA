@@ -9,9 +9,9 @@
 #' @return A dataset containing tidied Aquarius data
 getAquarius <- function(park, path = "data/park/", system = "Mac"){
   
-  park = "VALL"
-  system = "Mac"
-  path = "data/park/"
+  # park = "VALL"
+  # system = "Mac"
+  # path = "data/park/"
   
   full_data <- vector("list", length = length(park))
   
