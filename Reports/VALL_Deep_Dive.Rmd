@@ -262,6 +262,19 @@ weather_data <- vall_noaa %>%
   dplyr::mutate_at(c("snow","snwd", "prcp"), function(x) {x * 0.0393701}) %>%
   # convert from Celsius to Fahrenheit
   dplyr::mutate_at(c("tmax","tmin"), function(x) {(9/5) * x + 32})
+
+
+snotel <- getSNOTEL(aoi = park_boundary, dist = 2000, years = "all") %>%
+  clean_names()
+
+snotel_sites <- snotel %>%
+  group_by(site) %>%
+  dplyr::slice(1) %>% 
+  ungroup()
+
+
+
+
 ```
 
 #### ----- Nearest NWIS
@@ -370,7 +383,7 @@ aquarius_sites <- aquarius %>%
   st_as_sf(coords = c("lon", "lat"), crs = 4326)
 
 aquarius_weather <- aquarius %>%
-  filter(grepl("Air Temp", parameter, ignore.case = TRUE)) %>%
+  filter(grepl("Precip", parameter, ignore.case = TRUE)) %>%
   distinct(siteID, lon, lat, EPSG) %>%
   st_as_sf(coords = c("lon", "lat"), crs = 4326)
 
@@ -696,6 +709,11 @@ fut_use_monthly <- water_use %>%
 
 
 
+# Map of PODs
+a <- mapview(PODs, zcol = "own_lname", layer.name = "POD Owner", homebutton = FALSE) + mapview(park_boundary, col.regions = "seagreen", alpha.regions = 0.1, homebutton = FALSE, legend = FALSE)
+
+mapview::mapshot(a, file = "docs/Deep Dives/VALL/Figs/PODs.jpeg",
+                 remove_controls(c("zoomControl","homeButton")))
 
 ```
 
@@ -862,6 +880,16 @@ clim_jemez <- get_climate_historic(sf = jemez_watershed %>% dplyr::summarize() %
 # Read in all future data (previously downloaded)
 clim_jemez_fut <- readRDS("data/park/VALL/Climate_Data/clim_jemez_fut_all.rds") 
 
+
+clim_snotel <- get_climate_historic(sf = snotel_sites %>% dplyr::filter(site == "708"),
+                                    col_name = "site",
+                                    start = "1979-01-01",
+                                    end = "2023-01-01") %>%
+  dplyr::mutate(CF = "Historical",
+                GCM = "GridMET")
+
+
+
 # Extract unique grid center points for each dataset
 jemez_pts <- clim_jemez %>% 
   ungroup() %>% 
@@ -876,6 +904,12 @@ jemez_fut_pts <- clim_jemez_fut %>%
   st_as_sf(coords = c("x","y"), crs = st_crs(4326), remove = FALSE) %>%
   ungroup() %>%
   dplyr::select("old_x" = x, "old_y" = y)
+
+snotel_pts <- clim_snotel %>%
+  ungroup() %>%
+  distinct(x,y, .keep_all = TRUE) %>% 
+  st_as_sf(coords = c("x","y"), crs = st_crs(4326), remove = FALSE) %>%
+  dplyr::select(x,y)
 
 # Because gridmet and MACA-CMIP5 points are slightly off, create updated single
 # set of points to use for both datasets - default to gridmet. This matters because
@@ -920,6 +954,9 @@ For our report, we ran the NPS water balance model (WBM) for each GridMET point 
 
 load_wbm_rasters(crs = crs(pts))
 
+
+hock <- 2
+
 jemez_watershed_area <- jemez_watershed %>% 
   st_area() %>%
   set_units("ft^2") %>%
@@ -931,7 +968,7 @@ jemez_wbm <- run_NPS_WBM_points(points = jemez_pts,
                          Direct_Frac = .1, # CSU ADDITION
                          Return_Rate = 1, # CSU ADDITION
                          PET_Method = "Oudin",
-                         hock_coef = 2,
+                         hock_coef = hock,
                          Snowpack.Init = 0, 
                          Soil.Init = 0,
                          Shade.Coeff = 1,
@@ -962,7 +999,31 @@ jemez_fut_wbm <- run_NPS_WBM_points(points = jemez_pts,
                          Direct_Frac = .1, # CSU ADDITION
                          Return_Rate = 1, # CSU ADDITION
                          PET_Method = "Oudin",
-                         hock_coef = 2,
+                         hock_coef = hock,
+                         Snowpack.Init = 0, 
+                         Soil.Init = 0,
+                         Shade.Coeff = 1,
+                         T.Base = 0,
+                         Soil_mult = 2,
+                         PET_mult = 1,
+                         ret_final_cond = TRUE,
+                         use_final = FALSE)
+
+jemez_fut_wbm <- jemez_fut_wbm[[1]] %>%
+  # Discharge in inches per day
+  dplyr::mutate(runoff_cfs_wbm = (runoff_in_wbm / 12) * jemez_watershed_area / 86400)
+
+# test max infiltration rate - not used currently
+#max_inf <- .1 * (1/86400) * (1/12) * as.numeric((alluvium %>% st_area() %>% set_units("ft^2"))) # inches/day to cfs
+
+
+snotel_wbm <- run_NPS_WBM_points(points = snotel_pts,
+                         climate_data = clim_snotel,
+                         #col_name = "GCM", # CSU ADDITION
+                         Direct_Frac = .1, # CSU ADDITION
+                         Return_Rate = 1, # CSU ADDITION
+                         PET_Method = "Oudin",
+                         hock_coef = 4,
                          Snowpack.Init = 0, 
                          Soil.Init = 0,
                          Shade.Coeff = 1,
@@ -970,12 +1031,9 @@ jemez_fut_wbm <- run_NPS_WBM_points(points = jemez_pts,
                          Soil_mult = 2,
                          PET_mult = 1,
                          ret_final_cond = FALSE,
-                         use_final = TRUE) %>%
-  # Discharge in inches per day
-  dplyr::mutate(runoff_cfs_wbm = (runoff_in_wbm / 12) * jemez_watershed_area / 86400)
+                               use_final = FALSE) 
 
 
-max_inf <- .1 * (1/86400) * (1/12) * as.numeric((alluvium %>% st_area() %>% set_units("ft^2"))) # inches/day to cfs
 
 ```
 
@@ -1266,19 +1324,27 @@ wbm_annual <- wbm %>%
                 rech_frac = (recharge_in_wbm-baseflow_in) / runoff_in_wbm)
 
 
-
-
 peak_discharge_timing <- wbm %>%
   dplyr::mutate(year = year(date),
                 doy = yday(date),
                 wdoy = ifelse(doy < 274, (365-274) + doy, doy - 274)) %>%
   dplyr::group_by(year, CF) %>%
-  dplyr::slice_max(order_by = discharge_in_wbm, n = 1) %>%
-  dplyr::summarize(peak_doy = mean())
+  dplyr::slice_max(order_by = discharge_in_wbm, n = 1) #%>%
+  #dplyr::summarize(peak_doy = mean(wdoy))
 
-ggplot(peak_discharge_timing, aes(x = year, y = wdoy, color = CF)) + geom_point()
+mu <- peak_discharge_timing %>%
+  dplyr::group_by(CF) %>%
+  dplyr::summarize(mean_doy = median(doy, na.rm = TRUE))
 
-ggplot(wbm %>% dplyr::mutate(doy = yday(date)), aes(x = doy, y = discharge_in_wbm, color = CF)) + geom_point()
+#ggplot(peak_discharge_timing, aes(x = doy, fill = CF)) + 
+#  geom_histogram(aes(y = ..density..), alpha = 0.3, color = "black", binwidth = 7) +
+#  geom_density(position = "identity", alpha = 0.5) + 
+#  #geom_vline(data=mu, aes(xintercept=mean_doy, color=CF),
+#  #           linetype="dashed") +
+#  theme_bw() +
+#  labs(x = "Peak Discharge Day of Year") +
+#  scale_fill_manual("", values = c(nps_pal$grey, nps_pal$red, nps_pal$blue))
+
 
 ```
 
@@ -2202,18 +2268,16 @@ pdat <- wbm_annual %>%
                        Runoff = 86400 * 365.25 * runoff_cfs_wbm,
                        Recharge = 86400 * 365.25 * recharge_cfs_wbm,
                        Discharge = 86400 * 365.25 * discharge_cfs_wbm, 
-                       `Fossil GW` = 86400 * 365.25 * optim_par$par[5]) %>%
-         #pivot_longer(cols = c(`Recharge + Discharge`, Runoff, Recharge, Discharge, `Fossil GW`), values_to = "vals", names_to = "vars")) +
-         pivot_longer(cols = c(Runoff), values_to = "vals", names_to = "vars") %>%
-  dplyr::mutate(rect_min = ifelse(CF != "Historical", 2035, 1979),
-                rect_max = ifelse(CF != "Historical", 2065, 2012))
+                       `Fossil GW` = 86400 * 365.25 * optim_par$par[5]) 
   
 
-hist_median <- median(wbm_annual$runoff_cfs_wbm, na.rm = TRUE) * 86400 * 365.25
-hist_q_low <- quantile(wbm_annual$runoff_cfs_wbm, .1) * 86400 * 365.25
-hist_q_high <- quantile(wbm_annual$runoff_cfs_wbm, .9) * 86400 * 365.25
+hist_median <- median(pdat[pdat$year < 2013,]$Runoff, na.rm = TRUE) %>% as.numeric()
+hist_q_low <- quantile(pdat[pdat$year < 2013,]$Runoff, .1, na.rm = TRUE) %>% as.numeric()
+hist_q_high <- quantile(pdat[pdat$year < 2013,]$Runoff, .9, na.rm = TRUE) %>% as.numeric()
 
-runoff_var <- ggplot(pdat) +
+runoff_var <- ggplot(pdat %>% pivot_longer(cols = c(Runoff), values_to = "vals", names_to = "vars") %>%
+  dplyr::mutate(rect_min = ifelse(CF != "Historical", 2035, 1979),
+                rect_max = ifelse(CF != "Historical", 2065, 2012))) +
   geom_rect(aes(xmin = rect_min, xmax = rect_max, ymin = -Inf, ymax = Inf),fill = "grey85", linewidth = 0,  alpha = .1) + 
   geom_bar(aes(x = year, y = vals, fill = CF,#factor(vars, levels = c(`Fossil GW`, "Discharge", "Recharge", "Runoff", `Runoff + Discharge`)), 
                group = vars), stat = "identity", width = 0.9, position = position_dodge(width = 0.9)) +
@@ -2234,6 +2298,40 @@ runoff_var <- ggplot(pdat) +
 
 
 runoff_var
+
+# Calculate consecutive dry years
+t <- pdat %>%
+  dplyr::filter(year < 2012 | (year >= 2035 & year < 2065)) %>%
+  dplyr::mutate(r_lt_p1 = ifelse(Runoff <= hist_q_low, 1,0),
+                r_gt_p90 = ifelse(Runoff  >= hist_q_high, 1,0),
+                tot = ifelse(Runoff > 0, 1)) %>%
+     dplyr::ungroup() %>%
+  dplyr::select(r_lt_p1, r_gt_p90, tot, CF, Runoff,year)
+
+hist_rle <- rle(t[t$CF == "Historical",]$r_lt_p1)
+hist_rle_max <- hist_rle$lengths[hist_rle$values == 1] %>% max()
+
+hd_rle <- rle(t[t$CF == "Hot Dry",]$r_lt_p1)
+hd_rle_max <- hd_rle$lengths[hd_rle$values == 1] %>% max()
+
+ww_rle <- rle(t[t$CF == "Warm Wet",]$r_lt_p1)
+ww_rle_max <- ww_rle$lengths[ww_rle$values == 1] %>% max(na.rm = TRUE)
+
+# Get maximum runoff during each time period
+max_run <- t %>%
+  dplyr::group_by(CF) %>%
+  dplyr::summarize(max_runoff = max(Runoff, na.rm = TRUE))
+
+# Get percentage increase for warm wet max compared to historical max
+max_run[max_run$CF == "Warm Wet",][[2]] / max_run[max_run$CF == "Historical",][[2]]
+
+# Print summary of extreme wet and dry years
+t %>%
+    dplyr::group_by(CF) %>%
+  summarize_all(.funs = c(mean = mean, sum = sum)) %>%
+  dplyr::mutate(lt_per = 100 * r_lt_p1_sum/tot_sum,
+                gt_per = 100 * r_gt_p90_sum/tot_sum)
+
 
 ggsave(runoff_var, filename = "docs/Deep Dives/VALL/Figs/Figure_11.tif",
        dpi = 600, width = 7, height = 5)
@@ -2355,8 +2453,8 @@ seasonal_stats <- seasonal_wbm %>%
   dplyr::mutate(runoff_fraction = as.numeric(100* runoff_in_wbm/sum(runoff_in_wbm))) %>%
   dplyr::group_by(CF, season) %>%
   dplyr::summarize(runoff_fraction = mean(runoff_fraction)) %>%
-  dplyr::filter(season %in% c("Spring", "Winter")) %>%
-  dplyr::group_by(CF) %>%
+  #dplyr::filter(season %in% c("Spring", "Fall")) %>%
+  dplyr::group_by(CF, season) %>%
   dplyr::summarize(runoff_fraction = sum(runoff_fraction))
 
 
@@ -3045,9 +3143,9 @@ c1 <- ggarrange(plot_fun(fit_dat, "date", "discharge_cfs_wbm", "discharge_cfs", 
 
 c1 
 
-ggsave(c1, filename = "docs/Deep Dives/VALL/Figs/Figure_C1.jpg", width = 7.5, height = 6, dpi = 600)
+ggsave(c2, filename = "docs/Deep Dives/VALL/Figs/Figure_C2.jpg", width = 7.5, height = 6, dpi = 600)
 
-ggarrange(plot_fun(wbm %>% dplyr::filter(CF %in% c("Historical")), "date", "discharge_cfs_wbm", "discharge_cfs", "Daily"),
+c2 <- ggarrange(plot_fun(wbm %>% dplyr::filter(CF %in% c("Historical")), "date", "discharge_cfs_wbm", "discharge_cfs", "Daily"),
           plot_fun(wbm_monthly %>% dplyr::filter(CF %in% c("Historical")), "ym", "discharge_cfs_wbm", "discharge_cfs", "Monthly"),
           #plot_fun(test_dis_annual, "y", "Q_tot", "discharge_cfs", "Annual"),
           ncol = 1, common.legend = TRUE, legend = "bottom") %>%
@@ -3281,7 +3379,7 @@ ncol = 1, align = "v"
 )
 ```
 
-##### GridMET vs NOAA
+##### GridMET vs NOAA vs SNOTEL
 
 ```{r compare_weather}
 
@@ -3304,6 +3402,51 @@ ggplot(weather_comp) +
   theme_bw() +
   scale_color_manual("", values = c(pal$pink, pal$darkblue)) +
   labs(x = "", y = "Annual Precipitation (in)")
+
+
+# snow comp
+snow_comp <- snotel %>%
+  dplyr::filter(site == "708") %>%
+  st_drop_geometry() %>%
+  dplyr::filter(sensor_id %in% c("PREC.I", "SNWD.I", "WTEQ.I")) %>%
+  dplyr::select(date, value, sensor_id, water_year) %>%
+  dplyr::group_by(date, sensor_id, water_year) %>%
+  #dplyr::summarise(n = dplyr::n(), .by = c(date, sensor_id)) %>% # ID Duplicates
+  #dplyr::filter(n > 1L) 
+  dplyr::summarize(value = mean(value, na.rm = TRUE)) %>%
+  dplyr::ungroup() %>%
+    pivot_wider(names_from = sensor_id, values_from = value) %>% 
+  clean_names() %>%
+  dplyr::left_join(snotel_wbm %>% dplyr::filter(year(date) < 2024) %>% ungroup, 
+                   by = "date") %>%
+  dplyr::group_by(water_year) %>%
+  dplyr::mutate(precip_in_wbm_cum = cumsum(precip_in_wbm),
+                snow_in_wbm_cum = cumsum(snow_in_wbm),
+                melt_in_wbm_cum = cumsum(melt_in_wbm)) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(swe_storage_in_wbm = snow_in_wbm_cum - melt_in_wbm_cum)
+
+# Plot timeseries of max snow
+ggplot(snow_comp, aes(x = date)) +
+  geom_line(aes(y = wteq_i, color = "SNOTEL")) +
+  #geom_line(aes(y = swe_storage_in_wbm, color = "WBM SNOW - MELT")) +
+  geom_line(aes(y = snowpack_in_wbm, color = "WBM SNOWPACK")) +
+  theme_bw()
+
+
+ggplot(snow_comp %>%
+         dplyr::group_by(water_year) %>%
+         dplyr::summarize(snow = max(snow_in_wbm_cum),
+                          swe_storage = max(snowpack_in_wbm),
+                          wteq = max(wteq_i))) +
+  geom_point(aes(x = wteq, y = snow, color = "SNOTEL SWE v WBM MAX(SNOW)"), size = 3) +
+  geom_point(aes(x = wteq, y = swe_storage, color = "SNOTEL v WBM MAX(SNOWPACK)"), size = 3) +
+  geom_smooth(method = "lm", se = FALSE, aes(x = wteq, y = snow, color = "SNOTEL SWE v WBM MAX(SNOW)"), size = 1, linetype = "dashed") +
+  geom_smooth(method = "lm", se = FALSE, aes(x = wteq, y = swe_storage, color = "SNOTEL v WBM MAX(SNOWPACK)"), size = 1, linetype = "dashed") +
+  theme_bw() +
+  geom_abline() +
+  labs(x = "SNOTEL (Quemazon #708)", y = "WBM", title = "Valles Caldera Snow Comparison")
+
 
 ```
 
