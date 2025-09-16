@@ -16,6 +16,7 @@ First, install and/or load required packages and functions.
 ```{r setup, include = TRUE}
 
 knitr::opts_chunk$set(echo = TRUE)
+
 source('setup.R')
 
 
@@ -43,6 +44,13 @@ nps_pal <-list(blue = "#85b6dc",
                lightgrey = "#dcdcdc")
 
 load("data/park/VALL/CopyOfVALL_report_data.RData")
+
+# some of the WBM functions in the .RData file above need to be explicitly over-written:
+list.files("src/NPS_WBM/", full.names = TRUE) %>%
+  walk(~source(.x, keep.source = TRUE))
+
+c("src/get_climate_historic.R", "src/get_climate_future.R") %>%
+  walk(~source(.x, keep.source = TRUE))
 
 #conversions
 gal_to_cf <- 0.133681 # 0.133681 CF per Gallon
@@ -952,11 +960,14 @@ For our report, we ran the NPS water balance model (WBM) for each GridMET point 
 
 ```{r wbm_run}
 
+<<<<<<< HEAD
 load_wbm_rasters(crs = crs(pts))
 
 
 hock <- 2
 
+=======
+>>>>>>> f1dd2d9d0d7cd7ee8394921787c0a1eefbb05a0b
 jemez_watershed_area <- jemez_watershed %>% 
   st_area() %>%
   set_units("ft^2") %>%
@@ -978,8 +989,7 @@ jemez_wbm <- run_NPS_WBM_points(points = jemez_pts,
                          ret_final_cond = TRUE,
                                use_final = FALSE) 
 
-final_cond <- jemez_wbm[[2]] %>%
-  dplyr::select(x,y,final_soil, final_snowpack)
+final_cond <- jemez_wbm[[2]] 
 
 jemez_pts <- jemez_pts %>% 
   dplyr::left_join(final_cond, by = c("x","y"))
@@ -1031,7 +1041,14 @@ snotel_wbm <- run_NPS_WBM_points(points = snotel_pts,
                          Soil_mult = 2,
                          PET_mult = 1,
                          ret_final_cond = FALSE,
+<<<<<<< HEAD
                                use_final = FALSE) 
+=======
+                         use_final = TRUE,
+                         param_list = final_cond) %>%
+  # Discharge in inches per day
+  dplyr::mutate(runoff_cfs_wbm = (runoff_in_wbm / 12) * jemez_watershed_area / 86400)
+>>>>>>> f1dd2d9d0d7cd7ee8394921787c0a1eefbb05a0b
 
 
 
