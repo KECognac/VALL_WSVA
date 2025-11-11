@@ -54,6 +54,7 @@ c("src/get_climate_historic.R", "src/get_climate_future.R") %>%
 
 #conversions
 gal_to_cf <- 0.133681 # 0.133681 CF per Gallon
+
 ```
 
 Define park using 4-digit NPS Unit Code. Codes for all parks can be found at: <https://www.nps.gov/aboutus/foia/upload/NPS-Unit-List.xlsx>.
@@ -1150,10 +1151,11 @@ high_y = "Wet"
 low_y = "Dry"
 
 
-selected_gcms <- select_cfs_deep_dive(df = future_differentials, x, y, x_name, y_name, high_x, low_x, high_y, low_y, to_plot = TRUE)
+selected_gcms <- select_cfs_deep_dive(df = future_differentials %>% 
+                                        dplyr::mutate(delta_precip_in = delta_precip_in * 365.25), x, y, x_name, y_name, high_x, low_x, high_y, low_y, to_plot = TRUE)
 
 
-
+selected_gcms
 
 ```
 
@@ -1692,27 +1694,39 @@ Annual runoff, discharge, and recharge (inches) summary statistics for historica
 ```{r table_1}
 change <- wbm_annual %>%
   filter(year >= 1979 & year < 2065) %>%
-  mutate(stat_group = ifelse(year < 2013, "Hist",
-                             ifelse(year >= 2035, "Fut", "Present"))) %>%
+  mutate(
+    stat_group = ifelse(year < 2013, "Hist",
+                        ifelse(year >= 2035, "Fut", "Present")
+    )
+  ) %>%
   dplyr::ungroup() %>%
   dplyr::select(stat_group, CF, runoff_in_wbm, recharge_in_wbm, discharge_in_wbm) %>%
   dplyr::group_by(CF, stat_group) %>%
-  dplyr::summarize_all(.funs = list(mean = mean, 
-                                    #median = median, 
-                                    sd = sd)) %>%
-  dplyr::filter(stat_group != "Present",
-                !(stat_group == "Hist" & CF == "Hot Dry"),
-                !(stat_group == "Hist" & CF == "Warm Wet")) %>%
+  dplyr::summarize_all(.funs = list(
+    mean = mean, 
+    #median = median, 
+    sd = sd
+  )) %>%
+  dplyr::filter(
+    stat_group != "Present",
+    !(stat_group == "Hist" & CF == "Hot Dry"),
+    !(stat_group == "Hist" & CF == "Warm Wet")
+  ) %>%
   ungroup() %>%
   dplyr::select(-stat_group) %>%
   t() %>%
   as.data.frame() %>% # Convert to data frame (t() returns a matrix)
   set_names(.[1, ]) %>% # Set column names from the first row
   slice(-1)  %>% # Remove the first row (which now contains the column names)
-  mutate(across(everything(), ~suppressWarnings(as.numeric(as.character(.))))) %>%
-  dplyr::mutate(`% Change Hot Dry` = 100 * (`Hot Dry` - Historical) / Historical,
-                `% Change Warm Wet` = 100 * (`Warm Wet` - Historical) / Historical) %>%
-    dplyr::mutate(across(where(is.numeric), .fns = ~ signif(.x, 3)))
+  mutate(across(everything(), ~suppressWarnings(as.numeric(as.character(.))))
+  ) %>%
+  dplyr::mutate(
+    `% Change Hot Dry` = 100 * (`Hot Dry` - Historical) / Historical,
+    `% Change Warm Wet` = 100 * (`Warm Wet` - Historical) / Historical
+  ) %>%
+  dplyr::mutate(
+    across(where(is.numeric), .fns = ~ signif(.x, 3))
+  )
   
 
 kable(change)
@@ -1726,29 +1740,40 @@ Drought
 ```{r drought_metrics}
 
 spei_metrics %>%
-  dplyr::mutate(Category = 
-                         case_when(grepl("ext", Metric) ~ "Extreme",
-                                   grepl("mod", Metric) ~ "Moderate",
-                                   grepl("sev", Metric) ~ "Severe",
-                                   TRUE ~ "Overall"),
-                Statistic = 
-                         case_when(grepl("mean_duration", Metric) ~ "Mean (Duration)",
-                                   grepl("max_duration", Metric) ~ "Maximum (Duration)",
-                                   grepl("mean_spei", Metric) ~ "Mean (SPEI)",
-                                   grepl("median_spei", Metric) ~ "Median (SPEI)",
-                                   grepl("percent", Metric) ~ "% of Period",
-                                   grepl("median_duration", Metric) ~ "Median (Duration)",
-                                   grepl("sd_spei", Metric) ~ "Standard Deviation",
-                                   TRUE ~ Metric)) %>%
-  arrange(factor(Statistic, levels = c("% of Period","Mean (SPEI)", "Median (SPEI)", "Standard Deviation", "n", "Mean (Duration)", "Median (Duration)", "Maximum (Duration)"))) %>%
+  dplyr::mutate(
+    Category = case_when(
+      grepl("ext", Metric) ~ "Extreme",
+      grepl("mod", Metric) ~ "Moderate",
+      grepl("sev", Metric) ~ "Severe",
+      TRUE ~ "Overall"
+      ),
+    Statistic = case_when(
+      grepl("mean_duration", Metric) ~ "Mean (Duration)",
+      grepl("max_duration", Metric) ~ "Maximum (Duration)",
+      grepl("mean_spei", Metric) ~ "Mean (SPEI)",
+      grepl("median_spei", Metric) ~ "Median (SPEI)",
+      grepl("percent", Metric) ~ "% of Period",
+      grepl("median_duration", Metric) ~ "Median (Duration)",
+      grepl("sd_spei", Metric) ~ "Standard Deviation",
+      TRUE ~ Metric
+      )
+    ) %>%
+  arrange(factor(Statistic, levels = c(
+    "% of Period","Mean (SPEI)", "Median (SPEI)", "Standard Deviation", "n", 
+    "Mean (Duration)", "Median (Duration)", "Maximum (Duration)"
+    ))) %>%
   arrange(factor(Category, levels = c("Overall", "Moderate", "Severe", "Extreme"))) %>%
   dplyr::select(Category, Statistic, Historical, `Hot Dry`, `Warm Wet`) %>%
-  dplyr::mutate(Historical = as.numeric(Historical) %>% signif(., digits = 3),
-                `Hot Dry` = as.numeric(`Hot Dry`) %>% signif(., digits = 3),
-                `Warm Wet` = as.numeric(`Warm Wet`) %>% signif(., digits = 3)) %>%
+  dplyr::mutate(
+    Historical = as.numeric(Historical) %>% signif(., digits = 3),
+    `Hot Dry` = as.numeric(`Hot Dry`) %>% signif(., digits = 3),
+    `Warm Wet` = as.numeric(`Warm Wet`) %>% signif(., digits = 3)
+    ) %>%
   #mutate_if(is.numeric, format, digits = 4, nsmall = 0) %>%
-  dplyr::mutate(across(where(is.numeric), .fns = ~ signif(.x, 3))) #%>%
- # kable()
+  dplyr::mutate(
+    across(where(is.numeric), .fns = ~ signif(.x, 3))
+  ) #%>%
+# kable()
 
 ggplot(spei, aes(x = spei, fill = CF)) + 
   geom_histogram(alpha = 0.7, position = "identity") + 
@@ -1796,7 +1821,7 @@ demand <- water_use_an %>%
   dplyr::summarize(mean_demand = mean(demand_cf, na.rm = TRUE),
                    max_demand = max(demand_cf_max, na.rm = TRUE),
                    .groups = "keep") %>%
-  dplyr::mutate(across(where(is.numeric), .fns = ~ .x/1000000))
+  dplyr::mutate(across(where(is.numeric), .fns = ~ .x/1000000)) 
 
 # Data table of maximum use on annual basis is `use_an_2050`
 
@@ -1810,7 +1835,10 @@ DS <- supply %>%
   dplyr::arrange(desc(stat_period)) %>%
   dplyr::arrange(desc(CF)) %>%
   pivot_longer(cols = c(mean_demand, max_demand), values_to = "Demand", names_to = "Scenario") %>%
-  dplyr::select(CF, stat_period, Scenario, Demand, "Average_Supply" = mean_recharge_cf, "High_Stress_Supply" = min_recharge_cf, "Average_Supply_Frac" = mean_recharge_frac, "High_Stress_Supply_frac" = min_recharge_frac, "Average_DS" = mean_DS_all, "High_Stress_DS" = stress_DS_all, "Average_DS_Frac" = DS_frac, "High_Stress_DS_Frac" = stress_DS_frac) %>%
+  dplyr::select(CF, stat_period, Scenario, Demand, "Average_Supply" = mean_recharge_cf, "High_Stress_Supply" = min_recharge_cf, "Average_Supply_Frac" = mean_recharge_frac, "High_Stress_Supply_frac" = min_recharge_frac, "Average_DS" = mean_DS_all, "High_Stress_DS" = stress_DS_all, "Average_DS_Frac" = DS_frac, "High_Stress_DS_Frac" = stress_DS_frac)  %>%
+  # Cubic feet to gallons for Demand and supply
+  dplyr::mutate(across(.cols = c("Demand","Average_Supply", "High_Stress_Supply", "Average_Supply_Frac", "High_Stress_Supply_frac"),
+                       .fns = ~ .x/gal_to_cf)) %>%
   dplyr::mutate(across(where(is.numeric), .fns = ~ signif(.x, 2))) 
   #pivot_longer(cols = c(mean_recharge_cf, min_recharge_cf, mean_recharge_frac, min_recharge_frac), values_to = "Supply", names_to = "Scenario") 
 
@@ -1844,10 +1872,10 @@ SD <- water_use %>%
                    daily_max = max(daily_demand_cf, na.rm = TRUE),
                    daily_max_upper = max(daily_demand_cf_max, na.rm = TRUE),
                    .groups = "keep") %>%
-  dplyr::mutate(across(where(is.numeric), .fns = ~ .x/1000)) %>%
-  pivot_longer(c(monthly_max, monthly_max_upper, daily_max, daily_max_upper), names_to = "Stat", values_to = "Demand (kCF)") %>%
-  dplyr::mutate("Storage (kCF)" = 100000 * gal_to_cf / 1000,
-                "S:D" = `Storage (kCF)` / `Demand (kCF)`,
+  dplyr::mutate(across(where(is.numeric), .fns = ~ .x/(gal_to_cf * 1000))) %>%
+  pivot_longer(c(monthly_max, monthly_max_upper, daily_max, daily_max_upper), names_to = "Stat", values_to = "Demand (kgal)") %>%
+  dplyr::mutate("Storage (kgal)" = 100000 / 1000,
+                "S:D" = `Storage (kgal)` / `Demand (kgal)`,
                 days_supply = `S:D`*31) %>%
   dplyr::arrange(desc(stat_period)) %>%
   dplyr::mutate(across(where(is.numeric), .fns = ~ signif(.x, 2))) 
@@ -1864,13 +1892,11 @@ Estimated pumping volume
 # Range of GPM
 
 pump_vol <- data.frame(GPM = c(5,10,25,50,100)) %>%
-  dplyr::mutate(daily_pump_vol_cf = GPM * gal_to_cf * (24 * 60),
-                monthly_pump_vol_cf = daily_pump_vol_cf * 30,
-                annual_pump_vol_cf = daily_pump_vol_cf * 365.25) %>%
-  dplyr::mutate(across(where(is.numeric), .fns = ~ signif(.x, 2))) %>%
+  dplyr::mutate(daily_pump_vol_gal = GPM * (24 * 60),
+                monthly_pump_vol_gal = daily_pump_vol_gal * 30,
+                annual_pump_vol_gal = daily_pump_vol_gal * 365.25) %>%
+  dplyr::mutate(across(where(is.numeric), .fns = ~ signif(.x / 1000, 2))) %>%
   t() 
-  
-
 
 kable(pump_vol)
 
@@ -2147,12 +2173,12 @@ Meter use
 ```{r}
 
 f8 <- ggplot(meter_use_mon,
-         aes(x = ym, y = gal_to_cf * monthly_use)) +
+         aes(x = ym, y = monthly_use)) +
   #geom_line(lwd = 1.5, lineend = "round") +
   #geom_line(lwd = 1, color = pal$darkblue, lineend = "round") +
   geom_bar(stat = "identity", fill = pal$darkblue, color = "black", lwd = 0.4) +
   theme_bw() +
-  labs(x = "", y = "Monthly Water Use (CF)") +
+  labs(x = "", y = "Monthly Water Use (gallons)") +
   scale_y_continuous(labels = unit_format(unit = "K", scale = 1e-3))
 
 f8
@@ -2174,39 +2200,39 @@ Historical and projected water Demand
 f9 <- ggarrange(
 ggplot() +
   geom_line(data = hist_use_monthly, 
-            aes(x = month_date, y = demand_mean), 
+            aes(x = month_date, y = demand_mean/gal_to_cf), 
             color = "black", lwd = 1.5, lineend = "round") +
   geom_line(data = hist_use_monthly, 
-            aes(x = month_date, y = demand_mean, color = "Historical"), 
+            aes(x = month_date, y = demand_mean/gal_to_cf, color = "Historical"), 
             lwd = 1, lineend = "round") +
   geom_ribbon(data = hist_use_monthly, 
-              aes(x = month_date, ymin = demand_min, ymax = demand_max, fill = "Historical"), 
+              aes(x = month_date, ymin = demand_min/gal_to_cf, ymax = demand_max, fill = "Historical"), 
               alpha = 0.2) +
   geom_line(data = fut_use_monthly, 
-            aes(x = month_date, y = demand_mean), 
+            aes(x = month_date, y = demand_mean/gal_to_cf), 
             lwd = 1.5, lineend = "round", color = "black") +
   geom_line(data = fut_use_monthly, 
-            aes(x = month_date, y = demand_mean, color = "Projected"), 
+            aes(x = month_date, y = demand_mean/gal_to_cf, color = "Projected"), 
             lwd = 1, lineend = "round") +
   geom_ribbon(data = fut_use_monthly, 
-              aes(x = month_date, ymin = demand_min, ymax = demand_max, fill = "Projected"), 
+              aes(x = month_date, ymin = demand_min/gal_to_cf, ymax = demand_max/gal_to_cf, fill = "Projected"), 
               alpha = 0.2) +
   theme_bw() +
   scale_color_manual("", values = c(pal$darkblue, pal$orange)) +
   scale_fill_manual("", values = c(pal$darkblue, pal$orange)) +
   scale_x_date(labels = date_format("%b")) +
   theme(legend.position = "bottom", legend.margin = margin(t = -15, b = 0, l = 0, r = 0)) +
-  labs(y = "Monthly Demand (CF)", x = ""),
+  labs(y = "Monthly Demand (gallons)", x = ""),
 ggplot(water_use_an, aes(x = year)) +
   geom_rect(aes(xmin = 2035, xmax = 2065, ymin = -Inf, ymax = Inf),
             fill = "grey90", linewidth = 0,  alpha = .1) + 
-  geom_line(aes(y = demand_cf), lwd = 1.5, color = "black", lineend = "round") +
-  geom_line(aes(y = demand_cf, color = group), lwd = 1, lineend = "round") +
-  geom_ribbon(aes(ymin = demand_cf_min, ymax = demand_cf_max, fill = group), alpha = 0.2) +
+  geom_line(aes(y = demand_cf/gal_to_cf), lwd = 1.5, color = "black", lineend = "round") +
+  geom_line(aes(y = demand_cf/gal_to_cf, color = group), lwd = 1, lineend = "round") +
+  geom_ribbon(aes(ymin = demand_cf_min/gal_to_cf, ymax = demand_cf_max/gal_to_cf, fill = group), alpha = 0.2) +
   scale_color_manual("", values = c(pal$darkblue, pal$orange)) +
   scale_fill_manual("", values = c(pal$darkblue, pal$orange)) +
   theme_bw() +
-  labs(y = "Annual Demand (CF)", x = "") + 
+  labs(y = "Annual Demand (gallons)", x = "") + 
   scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
   theme(legend.position = "bottom", legend.margin = margin(t = -15, b = 0, l = 0, r = 0)),
 align = "hv", common.legend = TRUE, legend = "bottom"
@@ -2288,15 +2314,15 @@ pdat <- wbm_annual %>%
                        `Fossil GW` = 86400 * 365.25 * optim_par$par[5]) 
   
 
-hist_median <- median(pdat[pdat$year < 2013,]$Runoff, na.rm = TRUE) %>% as.numeric()
-hist_q_low <- quantile(pdat[pdat$year < 2013,]$Runoff, .1, na.rm = TRUE) %>% as.numeric()
-hist_q_high <- quantile(pdat[pdat$year < 2013,]$Runoff, .9, na.rm = TRUE) %>% as.numeric()
+hist_median <- median(pdat[pdat$year < 2013,]$Runoff, na.rm = TRUE) %>% as.numeric() / gal_to_cf
+hist_q_low <- quantile(pdat[pdat$year < 2013,]$Runoff, .1, na.rm = TRUE) %>% as.numeric() / gal_to_cf
+hist_q_high <- quantile(pdat[pdat$year < 2013,]$Runoff, .9, na.rm = TRUE) %>% as.numeric() / gal_to_cf
 
 runoff_var <- ggplot(pdat %>% pivot_longer(cols = c(Runoff), values_to = "vals", names_to = "vars") %>%
   dplyr::mutate(rect_min = ifelse(CF != "Historical", 2035, 1979),
                 rect_max = ifelse(CF != "Historical", 2065, 2012))) +
   geom_rect(aes(xmin = rect_min, xmax = rect_max, ymin = -Inf, ymax = Inf),fill = "grey85", linewidth = 0,  alpha = .1) + 
-  geom_bar(aes(x = year, y = vals, fill = CF,#factor(vars, levels = c(`Fossil GW`, "Discharge", "Recharge", "Runoff", `Runoff + Discharge`)), 
+  geom_bar(aes(x = year, y = vals/gal_to_cf, fill = CF,#factor(vars, levels = c(`Fossil GW`, "Discharge", "Recharge", "Runoff", `Runoff + Discharge`)), 
                group = vars), stat = "identity", width = 0.9, position = position_dodge(width = 0.9)) +
   geom_hline(aes(yintercept = hist_median, color = "Historical Median")) +
   geom_hline(aes(yintercept = hist_q_low, color = "Historical 0.1 and 0.9 Quantile"), linetype = "dashed") +
