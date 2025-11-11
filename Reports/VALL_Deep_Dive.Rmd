@@ -961,14 +961,10 @@ For our report, we ran the NPS water balance model (WBM) for each GridMET point 
 
 ```{r wbm_run}
 
-<<<<<<< HEAD
 load_wbm_rasters(crs = crs(pts))
-
 
 hock <- 2
 
-=======
->>>>>>> f1dd2d9d0d7cd7ee8394921787c0a1eefbb05a0b
 jemez_watershed_area <- jemez_watershed %>% 
   st_area() %>%
   set_units("ft^2") %>%
@@ -1042,14 +1038,11 @@ snotel_wbm <- run_NPS_WBM_points(points = snotel_pts,
                          Soil_mult = 2,
                          PET_mult = 1,
                          ret_final_cond = FALSE,
-<<<<<<< HEAD
-                               use_final = FALSE) 
-=======
                          use_final = TRUE,
                          param_list = final_cond) %>%
   # Discharge in inches per day
   dplyr::mutate(runoff_cfs_wbm = (runoff_in_wbm / 12) * jemez_watershed_area / 86400)
->>>>>>> f1dd2d9d0d7cd7ee8394921787c0a1eefbb05a0b
+
 
 
 
