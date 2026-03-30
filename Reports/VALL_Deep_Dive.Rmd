@@ -600,7 +600,7 @@ monthly_vis_cv <- sd(visitors$TotalVisitors)/mean(visitors$TotalVisitors)
 an_vis_cv <- sd(visitors_an$TotalVisitors)/mean(visitors_an$TotalVisitors)
 
 # Define staff per visitor ratio (assume 25 staff)
-staff_per_visitor <- 25 / mean(visitors_an$TotalVisitors, na.rm = TRUE)
+staff_per_visitor <- (25 / mean(visitors_an$TotalVisitors, na.rm = TRUE))/4
 
 proj_dat <- data.frame(
   year = c(2024,2075),
@@ -694,10 +694,16 @@ water_use <- visitors_proj %>%
 water_use_an <- visitors_an_proj %>%
   dplyr::mutate(demand_cf = TotalVisitors * eff_use_per_visitor,
                 demand_cf_min = TotalVisitors_min * eff_min_use_per_visitor,
-                demand_cf_max = TotalVisitors_max * eff_max_use_per_visitor)
+                demand_cf_max = TotalVisitors_max * eff_max_use_per_visitor) %>%
+  dplyr::mutate(demand_gal = demand_cf * 7.48052,
+                demand_gal_max = demand_cf_max * 7.48052,
+                demand_gal_min = demand_cf_min * 7.48052,
+                demand_af = demand_cf * .0000229569,
+                demand_af_max = demand_cf_max * .0000229569,
+                demand_af_min = demand_cf_min * .0000229569)
 
 
-                   
+# Calculate monthly historical use                   
 hist_use_monthly <- water_use %>%
            dplyr::filter(year >= 2020,
                          year < 2024) %>%
@@ -707,6 +713,7 @@ hist_use_monthly <- water_use %>%
                             demand_max = max(demand_cf_max, na.rm = TRUE)) %>%
            dplyr::mutate(month_date = as_date(paste0("2000-",month,"-01")))
 
+# Calculate monthly future use
 fut_use_monthly <- water_use %>%
            dplyr::filter(year >= 2035,
                          year < 2065) %>%
@@ -719,10 +726,13 @@ fut_use_monthly <- water_use %>%
 
 
 # Map of PODs
-a <- mapview(PODs, zcol = "own_lname", layer.name = "POD Owner", homebutton = FALSE) + mapview(park_boundary, col.regions = "seagreen", alpha.regions = 0.1, homebutton = FALSE, legend = FALSE)
+mapview(PODs, zcol = "own_lname", layer.name = "POD Owner") + 
+  mapview(park_boundary, 
+          col.regions = "seagreen", 
+          alpha.regions = 0.1, 
+          homebutton = FALSE, 
+          legend = FALSE)
 
-mapview::mapshot(a, file = "docs/Deep Dives/VALL/Figs/PODs.jpeg",
-                 remove_controls(c("zoomControl","homeButton")))
 
 ```
 
@@ -2499,30 +2509,57 @@ fut_yrs <- c(2035, 2065)
 
 f12 <- ggarrange(
   
+   ggplot(seasonal_wbm %>% dplyr::filter(y >= hist_yrs[1] & y < hist_yrs[2] | y >= fut_yrs[1] & y < fut_yrs[2])) +
+    geom_boxplot(aes(x = factor(season, levels = c("Winter", "Spring", "Summer", "Fall")), 
+                     y = precip_in_wbm, fill = CF),
+                 outlier.shape = NA,
+                 linewidth = .2) +
+    theme_bw() +
+    ylim(0,20) +
+    labs(x = "", y = "Precipitation (in)") +
+    scale_fill_manual("", values = c("#a9a9a9","#c5312a","#85b6dc")) +
+    theme(legend.position = "bottom", legend.margin = margin(t = -15, b = 0, l = 0, r = 0)),
+  
   ggplot(seasonal_wbm %>% dplyr::filter(y >= hist_yrs[1] & y < hist_yrs[2] | y >= fut_yrs[1] & y < fut_yrs[2])) +
     geom_boxplot(aes(x = factor(season, levels = c("Winter", "Spring", "Summer", "Fall")), 
                      y = rain_in_wbm, fill = CF),
                  outlier.shape = NA,
                  linewidth = .2) +
     theme_bw() +
+     ylim(0,20) +
     labs(x = "", y = "Rain (in)") +
     scale_fill_manual("", values = c("#a9a9a9","#c5312a","#85b6dc")) +
     theme(legend.position = "bottom", legend.margin = margin(t = -15, b = 0, l = 0, r = 0)),
+  
   ggplot(seasonal_wbm %>% dplyr::filter(y >= hist_yrs[1] & y < hist_yrs[2] | y >= fut_yrs[1] & y < fut_yrs[2])) +
-    geom_boxplot(aes(x = factor(season, levels = c("Winter", "Spring", "Summer", "Fall")),  
+    geom_boxplot(aes(x = factor(season, levels = c("Winter", "Spring", "Summer", "Fall")), 
                      y = snow_in_wbm, fill = CF),
+                 outlier.shape = NA,
+                 linewidth = .2) +
+    theme_bw() +
+     ylim(0,20) +
+    labs(x = "", y = "Snow (in)") +
+    scale_fill_manual("", values = c("#a9a9a9","#c5312a","#85b6dc")) +
+    theme(legend.position = "bottom", legend.margin = margin(t = -15, b = 0, l = 0, r = 0)),
+ 
+   ggplot(seasonal_wbm %>% dplyr::filter(y >= hist_yrs[1] & y < hist_yrs[2] | y >= fut_yrs[1] & y < fut_yrs[2])) +
+    geom_boxplot(aes(x = factor(season, levels = c("Winter", "Spring", "Summer", "Fall")),  
+                     y = melt_in_wbm, fill = CF),
                  outlier.shape = NA,
                  linewidth = 0.2) +
     theme_bw() +
+     ylim(0,20) +
     labs(x = "", y = "Snowmelt (in)") +
     scale_fill_manual("", values = c("#a9a9a9","#c5312a","#85b6dc")) +
     theme(legend.position = "bottom", legend.margin = margin(t = -15, b = 0, l = 0, r = 0)),
+  
   ggplot(seasonal_wbm %>% dplyr::filter(y >= hist_yrs[1] & y < hist_yrs[2] | y >= fut_yrs[1] & y < fut_yrs[2])) +
     geom_boxplot(aes(x = factor(season, levels = c("Winter", "Spring", "Summer", "Fall")),  
                      y = aet_in_wbm, fill = CF),
                  outlier.shape = NA,
                  linewidth = 0.2) +
     theme_bw() +
+     ylim(0,20) +
     labs(x = "", y = "AET (in)") +
     scale_fill_manual("", values = c("#a9a9a9","#c5312a","#85b6dc")) +
     theme(legend.position = "bottom", legend.margin = margin(t = -15, b = 0, l = 0, r = 0)),
@@ -2532,6 +2569,7 @@ f12 <- ggarrange(
                  outlier.shape = NA,
                  linewidth = 0.2) +
     theme_bw() +
+     ylim(0,20) +
     labs(x = "", y = "Runoff (in)") +
     scale_fill_manual("", values = c("#a9a9a9","#c5312a","#85b6dc")) +
     theme(legend.position = "bottom", legend.margin = margin(t = -15, b = 0, l = 0, r = 0)),
@@ -2541,6 +2579,7 @@ f12 <- ggarrange(
                  outlier.shape = NA,
                  linewidth = .2) +
     theme_bw() +
+     ylim(0,20) +
     labs(x = "", y = "Discharge (in)") +
     scale_fill_manual("", values = c("#a9a9a9","#c5312a","#85b6dc")) +
     theme(legend.position = "bottom", legend.margin = margin(t = -15, b = 0, l = 0, r = 0)),
@@ -2550,10 +2589,11 @@ f12 <- ggarrange(
                  outlier.shape = NA,
                  linewidth = .2) +
     theme_bw() +
+     ylim(0,20) +
     labs(x = "", y = "Recharge (in)") +
     scale_fill_manual("", values = c("#a9a9a9","#c5312a","#85b6dc")) +
     theme(legend.position = "bottom", legend.margin = margin(t = -15, b = 0, l = 0, r = 0)),
-  common.legend = TRUE, legend = "bottom", nrow = 2, ncol = 3
+  common.legend = TRUE, legend = "bottom", nrow = 2, ncol = 4
 )
 
 f12
