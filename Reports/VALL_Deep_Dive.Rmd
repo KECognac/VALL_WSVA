@@ -2029,47 +2029,6 @@ figure_4
 tmap_save(figure_4, dpi = 600, filename = "docs/Deep Dives/VALL/Figs/Figure_4.png", width = 6.5, height = 6.6)
 ```
 
-#### Figure 4 (alt)
-```{r}
-
-library("leaflet")
-# NPS Park Tiles for map background:
-tileURL  <- "https://atlas-stg.geoplatform.gov/styles/v1/atlas-user/ck58pyquo009v01p99xebegr9/tiles/256/{z}/{x}/{y}@2x?access_token=REDACTED_MAPBOX_TOKEN&"
-tile_attribution <- '"NPS"'
-
-pt <- st_centroid(park_boundary) %>%
-  st_coordinates()
-
-bounds <- st_bbox(park_boundary %>% st_buffer(5000))
-
-test_map <- leaflet::leaflet() %>%
-  leaflet::addTiles(urlTemplate = tileURL) %>%
-  leaflet::setView(lat = pt[2], pt[1], zoom = 12) %>%
-  #leaflet::fitBounds(lng1 = west, lat1 = south, lng2 = east, lat2 = north) %>%
- 
-  addScaleBar(position = c("bottomright"),
-              options = scaleBarOptions(updateWhenIdle = FALSE)) %>%
-   addPolygons(data = alluvium, # Use addPolygons() for polygons
-              color = "yellow", # Set the border color
-              weight = 2, # Set the border weight
-              fillColor = "yellow", # Set the fill color
-              fillOpacity = 0.3) %>% # Set the fill opacity) %>%
-  addCircleMarkers(data = proposed_well,  # Use addMarkers() for standard markers
-             lng = st_coordinates(proposed_well)[1], # Extract longitude
-             lat = st_coordinates(proposed_well)[2],
-             color = pal$black,
-             radius = 5,
-             fillOpacity = 1) %>%
-   addLegend("topright", colors = c(pal$black, "yellow"), labels = c("Proposed Well", "Valle Grande"))
-
-test_map
-
-
-#mapshot(test_map, file = "docs/Deep Dives/VALL/Figs/Figure_2_alt.jpg")
-
-
-```
-
 
 #### Figure 5
 
