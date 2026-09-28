@@ -514,7 +514,7 @@ well_fraction_recharge <- st_area(recharge_zone) / st_area(jemez_watershed)
 # which gives...
 # 2 * Q_shallow = Q_deep or Q_deep = 2/3 of total flow
 
-K_perch <- 100
+K_perch <- 10
 K_deep <- 1
 
 fraction_deep_recharge <- (K_deep * 100)/((K_deep * 100) + (K_perch * 5))
@@ -1846,7 +1846,41 @@ DS <- supply %>%
   #pivot_longer(cols = c(mean_recharge_cf, min_recharge_cf, mean_recharge_frac, min_recharge_frac), values_to = "Supply", names_to = "Scenario") 
 
 
-kable(DS)
+DS_formatted <- DS %>%
+  dplyr::mutate(
+    # Pair each demand scenario with its matching supply scenario
+    Supply_total = if_else(Scenario == "mean_demand", Average_Supply,       High_Stress_Supply),
+    Supply_frac  = if_else(Scenario == "mean_demand", Average_Supply_Frac,  High_Stress_Supply_frac),
+    DS_total_val = if_else(Scenario == "mean_demand", Average_DS,           High_Stress_DS),
+    DS_frac_val  = if_else(Scenario == "mean_demand", Average_DS_Frac,      High_Stress_DS_Frac),
+    # Relabel
+    Years        = if_else(stat_period == "near_future", "2025–2035", "2035–2065"),
+    Scenario     = if_else(Scenario == "mean_demand", "Average", "High-Stress"),
+    # Format small D:S total values as "< 0.001"
+    `D:S (total)` = if_else(DS_total_val < 0.001, "< 0.001", 
+                             as.character(signif(DS_total_val, 2)))
+  ) %>%
+  dplyr::select(
+    CF, Years, Scenario, Demand,
+    `Supply (fractional)` = Supply_frac,
+    `Supply (total)`      = Supply_total,
+    `D:S (fractional)`    = DS_frac_val,
+    `D:S (total)`
+  )
+
+DS_formatted %>%
+  dplyr::select(-CF) %>%
+  kable(
+    caption = "TABLE 3. Demand, supply, and D:S ratio estimates for near-future (2025–2035) 
+               and future (2035–2065) periods. All values in millions of gallons.",
+    col.names = c("Years", "Scenario", "Demand", 
+                  "Supply (fractional)", "Supply (total)", 
+                  "D:S (fractional)", "D:S (total)")
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "condensed"), full_width = FALSE) %>%
+  pack_rows("Warm Wet", 1, 4) %>%
+  pack_rows("Hot Dry",  5, 8)
+
 ```
 
 ##### Table 3
